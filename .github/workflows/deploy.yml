@@ -3,9 +3,12 @@ name: Build and Deploy Microservices
 on:
   push:
     branches:
+      - feature/project-setup
       - dev
       - qa
       - master
+
+  workflow_dispatch:
 
 permissions:
   id-token: write
@@ -31,6 +34,10 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::553336999743:role/github-actions-ecs-deploy-role
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: |
+          aws sts get-caller-identity
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
