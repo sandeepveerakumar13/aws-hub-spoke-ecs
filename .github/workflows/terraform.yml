@@ -3,7 +3,9 @@ name: Terraform
 on:
   push:
     branches:
-      - "**"
+      - dev
+      - qa
+      - master
   pull_request:
     branches:
       - dev
@@ -27,19 +29,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Show GitHub OIDC context
-        run: |
-          echo "Repository: $GITHUB_REPOSITORY"
-          echo "Ref: $GITHUB_REF"
-          echo "Branch: $GITHUB_REF_NAME"
-          echo "Event: $GITHUB_EVENT_NAME"
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::553336999743:role/github-actions-terraform-role
           aws-region: ap-south-1
-	  role-session-name: GitHubActionsTerraform
 
       - name: Verify AWS identity
         run: aws sts get-caller-identity
