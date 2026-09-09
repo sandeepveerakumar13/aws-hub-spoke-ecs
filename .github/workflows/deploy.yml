@@ -3,7 +3,7 @@ name: Build and Deploy Microservices
 on:
   push:
     branches:
-      - dev
+      - feature/project-setup
 
 permissions:
   id-token: write
@@ -21,53 +21,48 @@ jobs:
 
     steps:
 
-      # 1. Checkout source code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Configure AWS using GitHub OIDC
+      - name: Check GitHub OIDC context
+        run: |
+          echo "Repository: $GITHUB_REPOSITORY"
+          echo "Repository Owner: $GITHUB_REPOSITORY_OWNER"
+          echo "Ref: $GITHUB_REF"
+          echo "Branch: $GITHUB_REF_NAME"
+          echo "Event: $GITHUB_EVENT_NAME"
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::553336999743:role/github-actions-ecs-deploy-role
           aws-region: ${{ env.AWS_REGION }}
 
-      # 3. Verify AWS authentication
-      - name: Check AWS credentials
-        run: |
-          aws sts get-caller-identity
-
-      # 4. Login to Amazon ECR
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 5. Build API Docker image
       - name: Build API image
         run: |
           docker build \
             -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-api:latest \
             ./api
 
-      # 6. Build UI Docker image
       - name: Build UI image
         run: |
           docker build \
             -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-ui:latest \
             ./ui
 
-      # 7. Push API image
       - name: Push API image
         run: |
           docker push \
             $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-api:latest
 
-      # 8. Push UI image
       - name: Push UI image
         run: |
           docker push \
             $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-ui:latest
 
-      # 9. Deploy API to ECS
       - name: Deploy API to ECS
         run: |
           aws ecs update-service \
@@ -75,7 +70,6 @@ jobs:
             --service user-api-service \
             --force-new-deployment
 
-      # 10. Deploy UI to ECS
       - name: Deploy UI to ECS
         run: |
           aws ecs update-service \
@@ -83,14 +77,14 @@ jobs:
             --service user-ui-service \
             --force-new-deployment
 
-      # 11. Wait for ECS deployment
       - name: Wait for ECS services
         run: |
           aws ecs wait services-stable \
             --cluster $ECS_CLUSTER \
             --services user-api-service user-ui-service
 
-      # 12. Deployment result
-      - name: Deployment successful
+      - name: Deployment summary
         run: |
           echo "Deployment completed successfully"
+          echo "Commit: $GITHUB_SHA"
+          echo "ECS Cluster: $ECS_CLUSTER"
