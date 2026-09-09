@@ -1,4 +1,4 @@
-name: Deploy Microservices
+name: Build and Deploy Microservices
 
 on:
   push:
@@ -11,14 +11,16 @@ permissions:
 
 env:
   AWS_REGION: ap-south-1
-  ECR_REGISTRY: 553336999743.dkr.ecr.ap-south-1.amazonaws.com
+  AWS_ACCOUNT_ID: "553336999743"
+  ECS_CLUSTER: spoke-ecs-cluster
 
 jobs:
-  deploy:
-    name: Build and Deploy ECS
+  build-and-deploy:
+    name: Build and Deploy to ECS
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -26,45 +28,55 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::553336999743:role/github-actions-ecs-deploy-role
-          aws-region: ap-south-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build API image
         run: |
-          docker build -t $ECR_REGISTRY/user-api:${GITHUB_SHA} ./api
-          docker tag $ECR_REGISTRY/user-api:${GITHUB_SHA} $ECR_REGISTRY/user-api:latest
+          docker build \
+            -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-api:latest \
+            ./api
 
       - name: Build UI image
         run: |
-          docker build -t $ECR_REGISTRY/user-ui:${GITHUB_SHA} ./ui
-          docker tag $ECR_REGISTRY/user-ui:${GITHUB_SHA} $ECR_REGISTRY/user-ui:latest
+          docker build \
+            -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-ui:latest \
+            ./ui
 
       - name: Push API image
         run: |
-          docker push $ECR_REGISTRY/user-api:${GITHUB_SHA}
-          docker push $ECR_REGISTRY/user-api:latest
+          docker push \
+            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-api:latest
 
       - name: Push UI image
         run: |
-          docker push $ECR_REGISTRY/user-ui:${GITHUB_SHA}
-          docker push $ECR_REGISTRY/user-ui:latest
+          docker push \
+            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-ui:latest
 
-      - name: Force ECS deployment
+      - name: Deploy API to ECS
         run: |
           aws ecs update-service \
-            --cluster spoke-ecs-cluster \
+            --cluster $ECS_CLUSTER \
             --service user-api-service \
             --force-new-deployment
 
+      - name: Deploy UI to ECS
+        run: |
           aws ecs update-service \
-            --cluster spoke-ecs-cluster \
+            --cluster $ECS_CLUSTER \
             --service user-ui-service \
             --force-new-deployment
 
       - name: Wait for ECS services
         run: |
           aws ecs wait services-stable \
-            --cluster spoke-ecs-cluster \
+            --cluster $ECS_CLUSTER \
             --services user-api-service user-ui-service
+
+      - name: Deployment summary
+        run: |
+          echo "Deployment completed successfully"
+          echo "Commit: $GITHUB_SHA"
+          echo "ECS Cluster: $ECS_CLUSTER"
