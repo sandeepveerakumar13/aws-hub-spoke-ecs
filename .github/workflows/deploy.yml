@@ -46,11 +46,21 @@ jobs:
             ref
           }'
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::553336999743:role/github-actions-ecs-deploy-role
-          aws-region: ${{ env.AWS_REGION }}
+      - name: Test AWS OIDC authentication
+        env:
+          ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
+        run: |
+          TOKEN=$(curl -sSf \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" \
+            | jq -r '.value')
+
+          aws sts assume-role-with-web-identity \
+            --role-arn arn:aws:iam::553336999743:role/github-actions-ecs-deploy-role \
+            --role-session-name github-actions-test \
+            --web-identity-token "$TOKEN" \
+            --duration-seconds 900
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
