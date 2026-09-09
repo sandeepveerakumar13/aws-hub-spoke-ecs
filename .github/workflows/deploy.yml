@@ -1,0 +1,70 @@
+name: Deploy Microservices
+
+on:
+  push:
+    branches:
+      - feature/project-setup
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REGISTRY: 553336999743.dkr.ecr.ap-south-1.amazonaws.com
+
+jobs:
+  deploy:
+    name: Build and Deploy ECS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::553336999743:role/github-actions-ecs-deploy-role
+          aws-region: ap-south-1
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build API image
+        run: |
+          docker build -t $ECR_REGISTRY/user-api:${GITHUB_SHA} ./api
+          docker tag $ECR_REGISTRY/user-api:${GITHUB_SHA} $ECR_REGISTRY/user-api:latest
+
+      - name: Build UI image
+        run: |
+          docker build -t $ECR_REGISTRY/user-ui:${GITHUB_SHA} ./ui
+          docker tag $ECR_REGISTRY/user-ui:${GITHUB_SHA} $ECR_REGISTRY/user-ui:latest
+
+      - name: Push API image
+        run: |
+          docker push $ECR_REGISTRY/user-api:${GITHUB_SHA}
+          docker push $ECR_REGISTRY/user-api:latest
+
+      - name: Push UI image
+        run: |
+          docker push $ECR_REGISTRY/user-ui:${GITHUB_SHA}
+          docker push $ECR_REGISTRY/user-ui:latest
+
+      - name: Force ECS deployment
+        run: |
+          aws ecs update-service \
+            --cluster spoke-ecs-cluster \
+            --service user-api-service \
+            --force-new-deployment
+
+          aws ecs update-service \
+            --cluster spoke-ecs-cluster \
+            --service user-ui-service \
+            --force-new-deployment
+
+      - name: Wait for ECS services
+        run: |
+          aws ecs wait services-stable \
+            --cluster spoke-ecs-cluster \
+            --services user-api-service user-ui-service
