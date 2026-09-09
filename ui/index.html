@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AWS Hub-Spoke Demo</title>
+</head>
+<body>
+    <h1>AWS Hub-Spoke ECS Demo</h1>
+
+    <p>Frontend UI is running successfully.</p>
+
+    <button onclick="getUsers()">Get Users</button>
+
+    <pre id="result"></pre>
+
+    <script>
+        async function getUsers() {
+            const response = await fetch('/api/users');
+            const data = await response.json();
+
+            document.getElementById('result').textContent =
+                JSON.stringify(data, null, 2);
+        }
+    </script>
+</body>
+</html>
