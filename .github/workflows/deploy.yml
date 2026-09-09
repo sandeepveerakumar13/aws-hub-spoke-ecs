@@ -21,72 +21,53 @@ jobs:
 
     steps:
 
+      # 1. Checkout source code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Debug OIDC token claims
-        env:
-          ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
-          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
+      # 2. Configure AWS using GitHub OIDC
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::553336999743:role/github-actions-ecs-deploy-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      # 3. Verify AWS authentication
+      - name: Check AWS credentials
         run: |
-          TOKEN=$(curl -sSf \
-            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" \
-            | jq -r '.value')
+          aws sts get-caller-identity
 
-          PAYLOAD=$(echo "$TOKEN" | cut -d '.' -f2 | tr '_-' '/+' | base64 -d 2>/dev/null)
-
-          echo "$PAYLOAD" | jq '{
-            sub,
-            aud,
-            repository,
-            repository_id,
-            repository_owner,
-            repository_owner_id,
-            ref
-          }'
-
-      - name: Test AWS OIDC authentication
-        env:
-          ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
-          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
-        run: |
-          TOKEN=$(curl -sSf \
-            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" \
-            | jq -r '.value')
-
-          aws sts assume-role-with-web-identity \
-            --role-arn arn:aws:iam::553336999743:role/github-actions-ecs-deploy-role \
-            --role-session-name github-actions-test \
-            --web-identity-token "$TOKEN" \
-            --duration-seconds 900
-
+      # 4. Login to Amazon ECR
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      # 5. Build API Docker image
       - name: Build API image
         run: |
           docker build \
             -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-api:latest \
             ./api
 
+      # 6. Build UI Docker image
       - name: Build UI image
         run: |
           docker build \
             -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-ui:latest \
             ./ui
 
+      # 7. Push API image
       - name: Push API image
         run: |
           docker push \
             $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-api:latest
 
+      # 8. Push UI image
       - name: Push UI image
         run: |
           docker push \
             $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-ui:latest
 
+      # 9. Deploy API to ECS
       - name: Deploy API to ECS
         run: |
           aws ecs update-service \
@@ -94,6 +75,7 @@ jobs:
             --service user-api-service \
             --force-new-deployment
 
+      # 10. Deploy UI to ECS
       - name: Deploy UI to ECS
         run: |
           aws ecs update-service \
@@ -101,14 +83,14 @@ jobs:
             --service user-ui-service \
             --force-new-deployment
 
+      # 11. Wait for ECS deployment
       - name: Wait for ECS services
         run: |
           aws ecs wait services-stable \
             --cluster $ECS_CLUSTER \
             --services user-api-service user-ui-service
 
-      - name: Deployment summary
+      # 12. Deployment result
+      - name: Deployment successful
         run: |
           echo "Deployment completed successfully"
-          echo "Commit: $GITHUB_SHA"
-          echo "ECS Cluster: $ECS_CLUSTER"
