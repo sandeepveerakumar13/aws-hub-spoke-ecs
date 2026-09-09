@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - feature/project-setup
+      - dev
+      - qa
+      - master
+
+  workflow_dispatch:
 
 permissions:
   id-token: write
@@ -24,19 +29,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Check GitHub OIDC context
-        run: |
-          echo "Repository: $GITHUB_REPOSITORY"
-          echo "Repository Owner: $GITHUB_REPOSITORY_OWNER"
-          echo "Ref: $GITHUB_REF"
-          echo "Branch: $GITHUB_REF_NAME"
-          echo "Event: $GITHUB_EVENT_NAME"
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::553336999743:role/github-actions-ecs-deploy-role
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: |
+          aws sts get-caller-identity
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -87,4 +88,5 @@ jobs:
         run: |
           echo "Deployment completed successfully"
           echo "Commit: $GITHUB_SHA"
+          echo "Branch: $GITHUB_REF_NAME"
           echo "ECS Cluster: $ECS_CLUSTER"
