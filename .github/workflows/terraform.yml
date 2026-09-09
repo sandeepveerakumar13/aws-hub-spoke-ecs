@@ -3,9 +3,7 @@ name: Terraform
 on:
   push:
     branches:
-      - dev
-      - qa
-      - master
+      - "**"
   pull_request:
     branches:
       - dev
