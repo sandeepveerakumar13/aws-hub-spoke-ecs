@@ -1,4 +1,4 @@
-name: Terraform and Deploy Microservices
+name: Terraform Plan and Deploy
 
 on:
   push:
@@ -32,7 +32,6 @@ jobs:
         working-directory: terraform
 
     steps:
-
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -50,8 +49,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Verify AWS identity
-        run: |
-          aws sts get-caller-identity
+        run: aws sts get-caller-identity
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -69,23 +67,16 @@ jobs:
         run: terraform plan
 
       - name: Terraform Apply
-        if: |
-          github.event_name == 'push' &&
-          github.ref == 'refs/heads/master'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: terraform apply -auto-approve
-
 
   build-and-deploy:
     name: Build and Deploy Microservices
     needs: terraform
     runs-on: ubuntu-latest
-
-    if: |
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
 
     steps:
-
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -96,8 +87,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Verify AWS identity
-        run: |
-          aws sts get-caller-identity
+        run: aws sts get-caller-identity
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
