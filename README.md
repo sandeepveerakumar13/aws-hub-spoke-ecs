@@ -12,6 +12,15 @@ The main application traffic flow is:
 
 User → Application Load Balancer → Hub VPC → Transit Gateway → Spoke VPC → ECS Fargate
 
+# Live Tested URLs of Microservices
+
+- UI : [AWS Hub-Spoke Demo](http://hub-alb-296150890.ap-south-1.elb.amazonaws.com/ui)
+- API : [Users API](http://hub-alb-296150890.ap-south-1.elb.amazonaws.com/api/users)
+
+---
+
+## Project Overview
+
 The project demonstrates:
 
 - Hub-Spoke networking
