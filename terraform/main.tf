@@ -498,7 +498,7 @@ resource "aws_lb_listener_rule" "ui" {
     }
   }
 
-   transform {
+  transform {
     type = "url-rewrite"
 
     url_rewrite_config {
