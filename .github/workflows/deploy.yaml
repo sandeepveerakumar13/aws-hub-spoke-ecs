@@ -1,0 +1,152 @@
+name: Terraform and Deploy Microservices
+
+on:
+  push:
+    branches:
+      - "**"
+
+  pull_request:
+    branches:
+      - dev
+      - qa
+      - master
+
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  AWS_ACCOUNT_ID: "553336999743"
+  ECS_CLUSTER: spoke-ecs-cluster
+
+jobs:
+  terraform:
+    name: Terraform Plan and Apply
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Show GitHub context
+        run: |
+          echo "Repository: $GITHUB_REPOSITORY"
+          echo "Ref: $GITHUB_REF"
+          echo "Branch: $GITHUB_REF_NAME"
+          echo "Event: $GITHUB_EVENT_NAME"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::553336999743:role/github-actions-terraform-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: |
+          aws sts get-caller-identity
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan
+
+      - name: Terraform Apply
+        if: |
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/master'
+        run: terraform apply -auto-approve
+
+
+  build-and-deploy:
+    name: Build and Deploy Microservices
+    needs: terraform
+    runs-on: ubuntu-latest
+
+    if: |
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/master'
+
+    steps:
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::553336999743:role/github-actions-ecs-deploy-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: |
+          aws sts get-caller-identity
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build API image
+        run: |
+          docker build \
+            -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-api:latest \
+            ./api
+
+      - name: Build UI image
+        run: |
+          docker build \
+            -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-ui:latest \
+            ./ui
+
+      - name: Push API image
+        run: |
+          docker push \
+            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-api:latest
+
+      - name: Push UI image
+        run: |
+          docker push \
+            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-ui:latest
+
+      - name: Deploy API to ECS
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service user-api-service \
+            --force-new-deployment
+
+      - name: Deploy UI to ECS
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service user-ui-service \
+            --force-new-deployment
+
+      - name: Wait for ECS services
+        run: |
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services user-api-service user-ui-service
+
+      - name: Deployment summary
+        run: |
+          echo "Deployment completed successfully"
+          echo "Commit: $GITHUB_SHA"
+          echo "Branch: $GITHUB_REF_NAME"
+          echo "ECS Cluster: $ECS_CLUSTER"
